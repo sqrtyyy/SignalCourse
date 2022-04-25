@@ -5,6 +5,21 @@ from skimage.filters import threshold_isodata
 from skimage.morphology import binary_opening
 
 
+def remove_nested_contours(all_contours:list) -> list:
+    to_remove = []
+    all_contours = sorted([cv.approxPolyDP(x, 0.003 * cv.arcLength(x, True), True) for x in list(all_contours)],
+                          key=cv.contourArea, reverse=True)
+    for i in reversed(range(1, len(all_contours))):
+        point = (int(all_contours[i][0][0][0]), int(all_contours[i][0][0][1]))
+        for j in reversed(range(0, i)):
+            if cv.pointPolygonTest(all_contours[j], point, False) == 1:
+                to_remove.append(all_contours[i])
+                break
+
+    for cnt in to_remove:
+        all_contours.remove(cnt)
+    return  all_contours
+
 class Finder:
     _contour: np.ndarray
     _white_list: np.ndarray
@@ -72,7 +87,6 @@ class Finder:
         thresh = cv.inRange(hsv, hsv_min, hsv_max)
 
         all_contours, _ = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-
         min_contour_area = 20_000
         max_contour_area = 1_000_000
         areas_ratio = 0.6
@@ -81,8 +95,7 @@ class Finder:
             cv.convexHull(x)) > areas_ratio
 
         all_contours = list(filter(key, all_contours))
-        self._items_contours = np.asarray(
-            [cv.approxPolyDP(x, 0.003 * cv.arcLength(x, True), True) for x in list(all_contours)])
+        self._items_contours = np.asarray(remove_nested_contours(all_contours))
         return self._items_contours
 
     def save_result(self, name):
